@@ -13,6 +13,8 @@ npm-debug.log*
 # Build outputs
 client/dist/
 server/uploads/
+server/prisma/*.db
+server/prisma/*.db-journal
 
 # Environment
 **/.env
