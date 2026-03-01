@@ -1,0 +1,74 @@
+import crypto from 'crypto';
+import prisma from '../utils/prisma.js';
+import { createHmacSignature } from '../utils/hmac.js';
+import { generateReceiptFile } from '../services/receiptService.js';
+import { sendSms } from '../services/smsService.js';
+import { sendEmail } from '../services/emailService.js';
+
+export const createPayment = async (req, res) => {
+  const { amount, serviceType } = req.body;
+
+  if (!amount || !serviceType) {
+    return res.status(400).json({ message: 'amount and serviceType are required' });
+  }
+
+  const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+  const payment = await prisma.payment.create({
+    data: {
+      userId: req.user.id,
+      amount,
+      serviceType,
+      status: 'CREATED',
+      transactionId
+    }
+  });
+
+  const signature = createHmacSignature({ paymentId: payment.id, transactionId });
+
+  res.status(201).json({ payment, signature });
+};
+
+export const verifyPayment = async (req, res) => {
+  const { paymentId, status } = req.body;
+
+  if (!paymentId || !status) {
+    return res.status(400).json({ message: 'paymentId and status are required' });
+  }
+
+  const payment = await prisma.payment.findUnique({ where: { id: Number(paymentId) } });
+  if (!payment || payment.userId !== req.user.id) {
+    return res.status(404).json({ message: 'Payment not found' });
+  }
+
+  const normalizedStatus = status === 'SUCCESS' ? 'SUCCESS' : 'FAILED';
+
+  const updated = await prisma.payment.update({
+    where: { id: payment.id },
+    data: { status: normalizedStatus }
+  });
+
+  let receipt = null;
+
+  if (normalizedStatus === 'SUCCESS') {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const receiptPath = await generateReceiptFile({ payment: updated, user });
+
+    receipt = await prisma.receipt.create({
+      data: {
+        userId: req.user.id,
+        paymentId: updated.id,
+        receiptUrl: receiptPath
+      }
+    });
+
+    await sendSms(user.mobile, `Payment successful. Txn: ${updated.transactionId}`);
+    await sendEmail({
+      to: user.email,
+      subject: 'SUVIDHA Payment Success',
+      html: `<p>Your payment ${updated.transactionId} was successful.</p>`
+    });
+  }
+
+  res.status(200).json({ payment: updated, receipt });
+};

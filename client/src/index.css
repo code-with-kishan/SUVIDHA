@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: Inter, ui-sans-serif, system-ui;
+}
+
+.touch-btn {
+  min-height: 48px;
+}
+
+@keyframes floatSoft {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(14, 165, 233, 0);
+  }
+}
+
+.dashboard-card {
+  min-height: 110px;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 16px 28px rgba(15, 118, 110, 0.2);
+}
+
+.animate-float-soft {
+  animation: floatSoft 4s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.4s ease-in-out infinite;
+}
+
+.panel-card {
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.12);
+  border: 1px solid #e2e8f0;
+}
+
+.panel-card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.panel-card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 30px rgba(14, 165, 233, 0.18);
+}
+
+.hero-strip {
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #0f766e, #0ea5e9);
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(14, 165, 233, 0.22);
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #e0f2fe;
+  color: #0c4a6e;
+}

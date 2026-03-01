@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int               @id @default(autoincrement())
+  name            String?
+  mobile          String            @unique
+  email           String?
+  role            String            @default("CITIZEN")
+  aadhaar         String?
+  passwordHash    String?           @map("password_hash")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  serviceRequests ServiceRequest[]
+  complaints      Complaint[]
+  documents       Document[]
+  payments        Payment[]
+  receipts        Receipt[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model OTPVerification {
+  id         Int      @id @default(autoincrement())
+  mobile     String
+  otp        String
+  expiresAt  DateTime @map("expires_at")
+  verified   Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("otp_verifications")
+}
+
+model ServiceRequest {
+  id          Int           @id @default(autoincrement())
+  userId      Int           @map("user_id")
+  serviceType String        @map("service_type")
+  description String
+  status      String        @default("PENDING")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  user        User          @relation(fields: [userId], references: [id])
+
+  @@map("service_requests")
+}
+
+model Complaint {
+  id          Int           @id @default(autoincrement())
+  userId      Int           @map("user_id")
+  category    String
+  description String
+  status      String        @default("PENDING")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  user        User          @relation(fields: [userId], references: [id])
+
+  @@map("complaints")
+}
+
+model Document {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  fileUrl   String   @map("file_url")
+  docType   String   @map("doc_type")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("documents")
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  userId        Int           @map("user_id")
+  amount        Decimal
+  serviceType   String        @map("service_type")
+  status        String        @default("CREATED")
+  transactionId String?       @unique @map("transaction_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  user          User          @relation(fields: [userId], references: [id])
+  receipts      Receipt[]
+
+  @@map("payments")
+}
+
+model Receipt {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  paymentId  Int      @map("payment_id")
+  receiptUrl String   @map("receipt_url")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id])
+  payment    Payment  @relation(fields: [paymentId], references: [id])
+
+  @@map("receipts")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  action    String
+  metadata  String?
+  timestamp DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
