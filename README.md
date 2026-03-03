@@ -157,8 +157,27 @@ Note: Admin login is MFA. After password login, OTP verification is required.
 - Audio guidance and repeat prompts
 - Voice command and voice-fill on selected forms
 - Toggle keyboard/keypad support
-- High contrast and font scaling
+- Theme change controls (Normal/High Contrast) and font scaling
 - Idle privacy reset and quick `Start New User`
+
+### Assistant and voice features
+- Offline AI assistant chatbot (`Suvidha`) available across pages
+- Guided step-by-step support for login, services, complaints, payment, and tracking
+- General Q&A support for kiosk users without internet dependency
+- Voice command navigation (e.g., open dashboard/services/complaints/payment/tracking)
+- Voice field-fill support on key forms for faster assisted usage
+
+### How to use voice commands (examples)
+- Say `open dashboard` to go to dashboard
+- Say `open services` to navigate to service request screen
+- Say `open complaints` to navigate to complaint screen
+- Say `open payment` to navigate to payment screen
+- Say `open tracking` to navigate to status tracking
+- Say `open language` to return to language selection
+- Say `start new user` to reset kiosk session
+- Say `audio on` / `audio off` for guidance control
+- Say `volume up` / `volume down` / `mute` / `max volume`
+- Say `high contrast on` / `high contrast off`
 
 ### Reliability
 - Offline queue + sync for key citizen actions
