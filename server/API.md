@@ -15,12 +15,16 @@
 - `GET /api/services`
 - `POST /api/services/request`
   - body: `{ serviceType, description }`
+  - response includes `referenceCode` (4-digit unique ID)
 - `GET /api/services/status/:id`
+- `GET /api/services/application-status/:id`
+  - accepts 4-digit reference ID (preferred) or legacy numeric ID
 
 ## Complaints
 
 - `POST /api/complaints`
   - body: `{ category, description }`
+  - response includes `referenceCode` (4-digit unique ID)
 - `GET /api/complaints/user`
 
 ## Documents
@@ -41,11 +45,17 @@
 
 - `POST /api/admin/login`
   - body: `{ mobile, password }`
+- `POST /api/admin/login/verify`
+  - body: `{ mfaToken, otp }`
 - `GET /api/admin/dashboard`
 - `GET /api/admin/health`
 - `GET /api/admin/audit-logs?limit=50`
 - `PUT /api/admin/update-status/:id`
   - body: `{ type: 'service'|'complaint', status }`
+- `DELETE /api/admin/close/:id`
+  - body: `{ type: 'service'|'complaint' }`
+  - only works when current status is `RESOLVED` or `REJECTED`
+  - permanently deletes the record from database
 - `GET /api/admin/requests`
 - `GET /api/admin/complaints`
 - `GET /api/admin/users`
