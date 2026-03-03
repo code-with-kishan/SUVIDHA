@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: suvidha-notification-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: suvidha-notification-service
+  template:
+    metadata:
+      labels:
+        app: suvidha-notification-service
+    spec:
+      containers:
+        - name: suvidha-notification-service
+          image: suvidha-notification-service:latest
+          ports:
+            - containerPort: 5104
+          env:
+            - name: PORT
+              value: "5104"
+            - name: NODE_ENV
+              value: production
+            - name: CORS_ORIGIN
+              value: https://kiosk.suvidha.gov
+            - name: TWILIO_ACCOUNT_SID
+              valueFrom:
+                secretKeyRef:
+                  name: suvidha-server-secrets
+                  key: TWILIO_ACCOUNT_SID
+                  optional: true
+            - name: TWILIO_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: suvidha-server-secrets
+                  key: TWILIO_AUTH_TOKEN
+                  optional: true
+            - name: TWILIO_FROM
+              valueFrom:
+                secretKeyRef:
+                  name: suvidha-server-secrets
+                  key: TWILIO_FROM
+                  optional: true
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: suvidha-server-secrets
+                  key: SMTP_HOST
+                  optional: true
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: suvidha-server-secrets
+                  key: SMTP_USER
+                  optional: true
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: suvidha-server-secrets
+                  key: SMTP_PASS
+                  optional: true
+            - name: SMTP_FROM
+              valueFrom:
+                secretKeyRef:
+                  name: suvidha-server-secrets
+                  key: SMTP_FROM
+                  optional: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5104
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5104
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: suvidha-notification-service
+spec:
+  selector:
+    app: suvidha-notification-service
+  ports:
+    - port: 5104
+      targetPort: 5104
+  type: ClusterIP

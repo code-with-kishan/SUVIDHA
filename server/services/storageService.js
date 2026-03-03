@@ -7,7 +7,7 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 export const getFileUrl = (filename) => {
-  const baseUrl = process.env.APP_BASE_URL || 'http://localhost:5000';
+  const baseUrl = process.env.APP_BASE_URL || 'http://localhost:5003';
   return `${baseUrl}/uploads/${filename}`;
 };
 

@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int      @id @default(autoincrement())
+  name            String?
+  mobile          String   @unique
+  email           String?
+  role            String   @default("CITIZEN")
+  aadhaar         String?
+  passwordHash    String?  @map("password_hash")
+  createdAt       DateTime @default(now()) @map("created_at")
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model OTPVerification {
+  id         Int      @id @default(autoincrement())
+  mobile     String
+  otp        String
+  expiresAt  DateTime @map("expires_at")
+  verified   Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("otp_verifications")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  action    String
+  metadata  String?
+  timestamp DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}

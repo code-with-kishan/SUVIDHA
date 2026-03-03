@@ -1,7 +1,7 @@
 import multer from 'multer';
 import path from 'path';
 import prisma from '../utils/prisma.js';
-import { getUploadDir, getFileUrl } from '../services/storageService.js';
+import { getUploadDir } from '../services/storageService.js';
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, getUploadDir()),
@@ -32,7 +32,8 @@ export const uploadDocument = async (req, res) => {
     return res.status(400).json({ message: 'Consent is required before upload' });
   }
 
-  const fileUrl = getFileUrl(req.file.filename);
+  const origin = `${req.protocol}://${req.get('host')}`;
+  const fileUrl = `${origin}/uploads/${req.file.filename}`;
 
   const document = await prisma.document.create({
     data: {

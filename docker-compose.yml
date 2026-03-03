@@ -1,0 +1,97 @@
+version: '3.9'
+services:
+  suvidha-core-service:
+    build:
+      context: ./server
+    ports:
+      - '5003:5003'
+    environment:
+      PORT: 5003
+      NODE_ENV: production
+      DATABASE_URL: file:./dev.db
+      JWT_SECRET: change_this_super_secret
+      HMAC_SECRET: change_this_hmac_secret
+      CORS_ORIGIN: http://localhost:8080
+      KIOSK_DEVICE_KEYS: kiosk-01:change-me
+    volumes:
+      - ./server/uploads:/app/uploads
+      - ./server/prisma:/app/prisma
+
+  suvidha-auth-service:
+    build:
+      context: ./microservices/auth-service
+    ports:
+      - '5101:5101'
+    environment:
+      PORT: 5101
+      NODE_ENV: production
+      DATABASE_URL: file:/app/server/prisma/dev.db
+      JWT_SECRET: change_this_super_secret
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: http://localhost:8080
+    volumes:
+      - ./server:/app/server
+
+  suvidha-payment-fraud-service:
+    build:
+      context: ./microservices/payment-fraud-service
+    ports:
+      - '5102:5102'
+    environment:
+      PORT: 5102
+      NODE_ENV: production
+      DATABASE_URL: file:/app/server/prisma/dev.db
+      JWT_SECRET: change_this_super_secret
+      CORS_ORIGIN: http://localhost:8080
+    volumes:
+      - ./server:/app/server
+
+  suvidha-notification-service:
+    build:
+      context: ./microservices/notification-service
+    ports:
+      - '5104:5104'
+    environment:
+      PORT: 5104
+      NODE_ENV: production
+      CORS_ORIGIN: http://localhost:8080
+      TWILIO_ACCOUNT_SID: ''
+      TWILIO_AUTH_TOKEN: ''
+      TWILIO_FROM: ''
+      SMTP_HOST: ''
+      SMTP_PORT: 587
+      SMTP_USER: ''
+      SMTP_PASS: ''
+      SMTP_FROM: ''
+      SMTP_SECURE: 'false'
+
+  suvidha-api-gateway:
+    build:
+      context: ./microservices/api-gateway
+    ports:
+      - '5000:5000'
+    environment:
+      PORT: 5000
+      CORS_ORIGIN: http://localhost:8080
+      AUTH_SERVICE_URL: http://suvidha-auth-service:5101
+      PAYMENT_SERVICE_URL: http://suvidha-payment-fraud-service:5102
+      NOTIFICATION_SERVICE_URL: http://suvidha-notification-service:5104
+      CORE_SERVICE_URL: http://suvidha-core-service:5003
+    depends_on:
+      - suvidha-auth-service
+      - suvidha-payment-fraud-service
+      - suvidha-notification-service
+      - suvidha-core-service
+
+  suvidha-client:
+    build:
+      context: ./client
+      args:
+        VITE_API_URL: http://localhost:5000
+        VITE_KIOSK_ID: kiosk-01
+        VITE_KIOSK_KEY: change-me
+        VITE_APP_VERSION: 1.0.0
+    ports:
+      - '8080:80'
+    depends_on:
+      - suvidha-api-gateway

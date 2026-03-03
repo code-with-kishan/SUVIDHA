@@ -13,11 +13,20 @@ const cardStyles = [
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
+  const [health, setHealth] = useState(null);
+  const [auditLogs, setAuditLogs] = useState([]);
 
   useEffect(() => {
     (async () => {
-      const { data } = await api.get('/api/admin/dashboard');
-      setStats(data);
+      const [dashboardRes, healthRes, logsRes] = await Promise.all([
+        api.get('/api/admin/dashboard'),
+        api.get('/api/admin/health'),
+        api.get('/api/admin/audit-logs?limit=8')
+      ]);
+
+      setStats(dashboardRes.data);
+      setHealth(healthRes.data);
+      setAuditLogs(logsRes.data || []);
     })();
   }, []);
 
@@ -68,6 +77,42 @@ export default function AdminDashboardPage() {
         >
           Reports
         </Link>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <section className="panel-card p-5">
+          <h3 className="text-lg font-semibold text-primary">Kiosk & System Health</h3>
+          {!health && <p className="mt-2 text-sm text-slate-600">Loading health metrics...</p>}
+          {health && (
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              <p>Uptime (seconds): {health.uptimeSeconds}</p>
+              <p>Environment: {health.environment}</p>
+              <p>
+                Kiosks Online/Offline: {health.kiosks?.online || 0}/{health.kiosks?.offline || 0}
+              </p>
+              <p>Recent Audit Actions (24h): {health.recentAuditActions}</p>
+              <p>Failed Payments: {health.failedPayments}</p>
+            </div>
+          )}
+        </section>
+
+        <section className="panel-card p-5">
+          <h3 className="text-lg font-semibold text-primary">Recent Audit Logs</h3>
+          {!auditLogs.length && <p className="mt-2 text-sm text-slate-600">No recent logs.</p>}
+          {!!auditLogs.length && (
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              {auditLogs.map((log) => (
+                <div key={log.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <p className="font-semibold">{log.action}</p>
+                  <p className="text-xs text-slate-500">{new Date(log.timestamp).toLocaleString()}</p>
+                  <p className="text-xs text-slate-600">
+                    Actor: {log.user?.name || 'System'} {log.user?.role ? `(${log.user.role})` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </Layout>
   );

@@ -40,6 +40,7 @@ model OTPVerification {
 model ServiceRequest {
   id          Int           @id @default(autoincrement())
   userId      Int           @map("user_id")
+  referenceCode String?     @unique @map("reference_code")
   serviceType String        @map("service_type")
   description String
   status      String        @default("PENDING")
@@ -53,10 +54,12 @@ model ServiceRequest {
 model Complaint {
   id          Int           @id @default(autoincrement())
   userId      Int           @map("user_id")
+  referenceCode String?     @unique @map("reference_code")
   category    String
   description String
   status      String        @default("PENDING")
   createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
   user        User          @relation(fields: [userId], references: [id])
 
   @@map("complaints")

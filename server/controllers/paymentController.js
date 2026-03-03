@@ -1,15 +1,58 @@
-import crypto from 'crypto';
 import prisma from '../utils/prisma.js';
 import { createHmacSignature } from '../utils/hmac.js';
 import { generateReceiptFile } from '../services/receiptService.js';
 import { sendSms } from '../services/smsService.js';
 import { sendEmail } from '../services/emailService.js';
+import { assessTransactionRisk } from '../services/fraudDetectionService.js';
+import { createAuditLog } from '../services/auditService.js';
 
 export const createPayment = async (req, res) => {
   const { amount, serviceType } = req.body;
 
   if (!amount || !serviceType) {
     return res.status(400).json({ message: 'amount and serviceType are required' });
+  }
+
+  const [user, recentFailures, rapidAttempts] = await Promise.all([
+    prisma.user.findUnique({ where: { id: req.user.id } }),
+    prisma.payment.count({
+      where: {
+        userId: req.user.id,
+        status: 'FAILED',
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
+        }
+      }
+    }),
+    prisma.payment.count({
+      where: {
+        userId: req.user.id,
+        createdAt: {
+          gte: new Date(Date.now() - 10 * 60 * 1000)
+        }
+      }
+    })
+  ]);
+
+  const risk = assessTransactionRisk({
+    amount,
+    user,
+    recentFailures,
+    rapidAttempts
+  });
+
+  if (risk.riskLevel === 'HIGH') {
+    await createAuditLog({
+      userId: req.user.id,
+      action: 'PAYMENT_FRAUD_ALERT',
+      metadata: {
+        amount,
+        serviceType,
+        riskScore: risk.riskScore,
+        riskLevel: risk.riskLevel,
+        reasons: risk.reasons
+      }
+    });
   }
 
   const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -26,7 +69,7 @@ export const createPayment = async (req, res) => {
 
   const signature = createHmacSignature({ paymentId: payment.id, transactionId });
 
-  res.status(201).json({ payment, signature });
+  res.status(201).json({ payment, signature, risk });
 };
 
 export const verifyPayment = async (req, res) => {

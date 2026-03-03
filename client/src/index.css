@@ -4,6 +4,92 @@
 
 body {
   font-family: Inter, ui-sans-serif, system-ui;
+  overflow-x: hidden;
+}
+
+#root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+p,
+span,
+div,
+a,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+body.high-contrast {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+body.high-contrast #root,
+body.high-contrast main,
+body.high-contrast header,
+body.high-contrast footer,
+body.high-contrast nav,
+body.high-contrast section,
+body.high-contrast article,
+body.high-contrast aside {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+body.high-contrast .bg-white,
+body.high-contrast .bg-slate-100,
+body.high-contrast .bg-primary,
+body.high-contrast .hero-strip,
+body.high-contrast .panel-card,
+body.high-contrast .dashboard-card,
+body.high-contrast .rounded-2xl,
+body.high-contrast .rounded-xl {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+body.high-contrast .text-slate-100,
+body.high-contrast .text-slate-600,
+body.high-contrast .text-slate-700,
+body.high-contrast .text-slate-800,
+body.high-contrast .text-primary,
+body.high-contrast .text-secondary {
+  color: #fff !important;
+}
+
+body.high-contrast button,
+body.high-contrast a,
+body.high-contrast input,
+body.high-contrast textarea,
+body.high-contrast select {
+  border-color: #fff !important;
+  color: #fff !important;
+  background: #000 !important;
+}
+
+body.high-contrast a {
+  color: #fde047 !important;
+}
+
+body.high-contrast .panel-card,
+body.high-contrast .hero-strip,
+body.high-contrast .dashboard-card,
+body.high-contrast .rounded-2xl,
+body.high-contrast .rounded-xl {
+  border-color: #fff !important;
+  box-shadow: none !important;
+}
+
+*:focus-visible {
+  outline: 3px solid #0ea5e9;
+  outline-offset: 2px;
 }
 
 .touch-btn {

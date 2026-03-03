@@ -1,10 +1,12 @@
 import bcrypt from 'bcrypt';
 import prisma from '../utils/prisma.js';
 import { generateOtp, getOtpExpiry } from '../utils/otp.js';
-import { signJwt } from '../utils/jwt.js';
+import { signJwt, signJwtWithOptions, verifyJwt } from '../utils/jwt.js';
 import { sendSms } from '../services/smsService.js';
 import { sendEmail } from '../services/emailService.js';
 import { createAuditLog } from '../services/auditService.js';
+
+const ADMIN_MFA_PURPOSE = 'ADMIN_MFA_CHALLENGE';
 
 export const sendOtp = async (req, res) => {
   const { mobile, email } = req.body;
@@ -28,27 +30,25 @@ export const sendOtp = async (req, res) => {
     data: { mobile, otp, expiresAt }
   });
 
-  await sendSms(mobile, `Your SUVIDHA OTP is ${otp}. It is valid for 2 minutes.`);
-  if (targetEmail) {
-    await sendEmail({
-      to: targetEmail,
-      subject: 'SUVIDHA OTP Verification',
-      html: `<p>Your SUVIDHA OTP is <b>${otp}</b>. It is valid for 2 minutes.</p>`
-    });
-  }
+  await sendEmail({
+    to: targetEmail,
+    subject: 'SUVIDHA OTP Verification',
+    html: `<p>Your SUVIDHA OTP is <b>${otp}</b>. It is valid for 2 minutes.</p>`
+  });
 
   await createAuditLog({
     userId: existingUser?.id || null,
     action: 'AUTH_SEND_OTP',
-    metadata: { mobile, email: targetEmail || null }
+    metadata: { mobile, email: targetEmail || null, otpChannel: 'email' }
   });
 
   res.status(200).json({
-    message: 'OTP sent successfully',
+    message: 'OTP sent successfully to email',
     channels: {
-      sms: true,
-      email: Boolean(targetEmail)
+      sms: false,
+      email: true
     },
+    smsProvider: 'disabled',
     ...(process.env.NODE_ENV !== 'production' ? { devOtp: otp } : {})
   });
 };
@@ -125,7 +125,7 @@ export const getProfile = async (req, res) => {
   res.status(200).json(user);
 };
 
-export const adminLogin = async (req, res) => {
+export const adminLoginInit = async (req, res) => {
   const { mobile, password } = req.body;
 
   if (!mobile || !password) {
@@ -142,6 +142,102 @@ export const adminLogin = async (req, res) => {
     return res.status(401).json({ message: 'Invalid admin credentials' });
   }
 
+  const otp = generateOtp();
+  const expiresAt = getOtpExpiry();
+
+  await prisma.oTPVerification.create({
+    data: { mobile: admin.mobile, otp, expiresAt }
+  });
+
+  await sendSms(admin.mobile, `Your SUVIDHA admin login OTP is ${otp}. It is valid for 2 minutes.`);
+  if (admin.email) {
+    await sendEmail({
+      to: admin.email,
+      subject: 'SUVIDHA Admin Login OTP',
+      html: `<p>Your SUVIDHA admin OTP is <b>${otp}</b>. It is valid for 2 minutes.</p>`
+    });
+  }
+
+  const mfaToken = signJwtWithOptions(
+    {
+      id: admin.id,
+      mobile: admin.mobile,
+      role: admin.role,
+      purpose: ADMIN_MFA_PURPOSE
+    },
+    { expiresIn: '5m' }
+  );
+
+  await createAuditLog({
+    userId: admin.id,
+    action: 'ADMIN_MFA_INIT',
+    metadata: { mobile: admin.mobile, channels: { sms: true, email: Boolean(admin.email) } }
+  });
+
+  res.status(200).json({
+    message: 'OTP sent for admin login verification',
+    mfaToken,
+    channels: { sms: true, email: Boolean(admin.email) },
+    ...(process.env.NODE_ENV !== 'production' ? { devOtp: otp } : {})
+  });
+};
+
+export const adminLoginVerify = async (req, res) => {
+  const { mfaToken, otp } = req.body;
+
+  if (!mfaToken || !otp) {
+    return res.status(400).json({ message: 'mfaToken and otp are required' });
+  }
+
+  let challenge;
+  try {
+    challenge = verifyJwt(mfaToken);
+  } catch (_error) {
+    return res.status(401).json({ message: 'Invalid or expired MFA challenge' });
+  }
+
+  if (challenge.purpose !== ADMIN_MFA_PURPOSE) {
+    return res.status(401).json({ message: 'Invalid MFA challenge purpose' });
+  }
+
+  const record = await prisma.oTPVerification.findFirst({
+    where: {
+      mobile: challenge.mobile,
+      otp,
+      verified: false
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  if (!record) {
+    return res.status(400).json({ message: 'Invalid OTP' });
+  }
+
+  if (new Date() > record.expiresAt) {
+    return res.status(400).json({ message: 'OTP expired' });
+  }
+
+  await prisma.oTPVerification.update({
+    where: { id: record.id },
+    data: { verified: true }
+  });
+
+  const admin = await prisma.user.findUnique({ where: { mobile: challenge.mobile } });
+  if (!admin || !['ADMIN', 'SUPER_ADMIN'].includes(admin.role)) {
+    return res.status(401).json({ message: 'Invalid admin account' });
+  }
+
   const token = signJwt({ id: admin.id, mobile: admin.mobile, role: admin.role });
+
+  await createAuditLog({
+    userId: admin.id,
+    action: 'ADMIN_LOGIN_SUCCESS',
+    metadata: { mobile: admin.mobile, mfa: true }
+  });
+
   res.status(200).json({ token, user: admin });
+};
+
+export const adminLogin = async (_req, res) => {
+  res.status(428).json({ message: 'Admin MFA is required. Use /api/admin/login then /api/admin/login/verify.' });
 };

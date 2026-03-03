@@ -5,7 +5,12 @@ import { setLanguage } from '../redux/store';
 const options = [
   { code: 'en', label: 'English' },
   { code: 'hi', label: 'हिंदी' },
-  { code: 'mr', label: 'मराठी' }
+  { code: 'mr', label: 'मराठी' },
+  { code: 'pa', label: 'ਪੰਜਾਬੀ' },
+  { code: 'ur', label: 'اردو' },
+  { code: 'ne', label: 'नेपाली' },
+  { code: 'ks', label: 'کٲشُر' },
+  { code: 'doi', label: 'डोगरी' }
 ];
 
 export default function LanguageToggle() {
@@ -19,13 +24,13 @@ export default function LanguageToggle() {
   };
 
   return (
-    <div className="rounded-xl bg-white p-1 shadow-sm">
-      <div className="flex items-center gap-1">
+    <div className="max-w-full rounded-xl bg-white p-1 shadow-sm">
+      <div className="flex max-w-full items-center gap-1 overflow-x-auto whitespace-nowrap">
       {options.map((option) => (
         <button
           key={option.code}
           onClick={() => onChange(option.code)}
-          className={`touch-btn min-w-24 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+          className={`touch-btn shrink-0 rounded-lg px-2 py-2 text-xs font-semibold transition sm:px-3 sm:text-sm ${
             selected === option.code
               ? 'bg-secondary text-white shadow'
               : 'bg-transparent text-slate-700 hover:bg-slate-100'

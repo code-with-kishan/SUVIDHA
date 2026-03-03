@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: suvidha-auth-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: suvidha-auth-service
+  template:
+    metadata:
+      labels:
+        app: suvidha-auth-service
+    spec:
+      containers:
+        - name: suvidha-auth-service
+          image: suvidha-auth-service:latest
+          ports:
+            - containerPort: 5101
+          env:
+            - name: PORT
+              value: "5101"
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: suvidha-server-secrets
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: suvidha-server-secrets
+                  key: JWT_SECRET
+            - name: CORS_ORIGIN
+              value: https://kiosk.suvidha.gov
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5101
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5101
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: suvidha-auth-service
+spec:
+  selector:
+    app: suvidha-auth-service
+  ports:
+    - port: 5101
+      targetPort: 5101
+  type: ClusterIP
