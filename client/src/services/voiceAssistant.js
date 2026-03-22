@@ -196,16 +196,10 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
 
   for (const voice of candidates) {
     if (speechRequestId !== requestId) return false;
-    try {
-      await wait(100);
-      synth.cancel();
-      await wait(150);
-      synth.pause();
-      await wait(100);
-      synth.resume();
-      await wait(100);
-    } catch (_error) {
-      // ignored
+    
+    // Wait for any pending utterances to finish before trying a new voice
+    while (synth.pending) {
+      await wait(50);
     }
 
     let allOk = true;
