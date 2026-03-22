@@ -3,8 +3,11 @@
 ## Frontend (Vercel/Netlify)
 
 - Root: `client`
+- Framework preset: `Vite`
+- Install command: `npm install`
 - Build command: `npm run build`
 - Output directory: `dist`
+- Vercel routing: `client/vercel.json` provides SPA fallback to `index.html`
 - Env:
   - `VITE_API_URL=https://your-api-domain`
   - `VITE_KIOSK_ID=kiosk-01`
@@ -23,6 +26,10 @@
   - `CORS_ORIGIN`
   - `KIOSK_DEVICE_KEYS` (format: `kiosk-01:key1,kiosk-02:key2`)
   - optional Twilio/SMTP keys
+
+Note:
+- The current backend uses Prisma + local uploads and is not a good fit for a single Vercel serverless deployment in its current form.
+- Recommended production pattern: deploy frontend on Vercel and backend on Render/Railway/AWS, then set `VITE_API_URL` to backend HTTPS URL.
 
 ## Database (Neon/Supabase/RDS)
 

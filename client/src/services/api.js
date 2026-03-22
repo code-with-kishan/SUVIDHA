@@ -1,8 +1,13 @@
 import axios from 'axios';
 
+const rawApiUrl = String(import.meta.env.VITE_API_URL || '').trim();
+const normalizedApiUrl = rawApiUrl.replace(/\/$/, '');
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5003'
+  baseURL: normalizedApiUrl || '/'
 });
+
+export const getApiBaseUrl = () => normalizedApiUrl || window.location.origin;
 
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem('suvidha_token');

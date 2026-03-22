@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
-import api from '../services/api';
+import api, { getApiBaseUrl } from '../services/api';
 
 const statuses = ['PENDING', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'];
 
@@ -9,7 +9,7 @@ export default function RequestsManagementPage() {
 
   const resolveDocUrl = (url) => {
     if (!url) return '#';
-    const apiBase = String(api.defaults.baseURL || 'http://localhost:5003').replace(/\/$/, '');
+    const apiBase = String(getApiBaseUrl()).replace(/\/$/, '');
     return url.replace(/^http:\/\/localhost:5000/i, apiBase);
   };
 

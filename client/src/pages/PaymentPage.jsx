@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
 import KioskButton from '../components/KioskButton';
 import OnScreenKeypad from '../components/OnScreenKeypad';
-import api from '../services/api';
+import api, { getApiBaseUrl } from '../services/api';
 
 export default function PaymentPage() {
   const { t } = useTranslation();
@@ -203,7 +203,7 @@ export default function PaymentPage() {
           )}
           {receiptUrl && (
             <a
-              href={`${import.meta.env.VITE_API_URL || 'http://localhost:5003'}${receiptUrl}`}
+              href={`${getApiBaseUrl()}${receiptUrl}`}
               target="_blank"
               rel="noreferrer"
               className="touch-btn inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-3 text-lg font-semibold text-white shadow transition hover:-translate-y-0.5 hover:shadow-lg"
