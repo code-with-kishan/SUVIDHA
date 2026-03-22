@@ -11,6 +11,7 @@ const speechLocaleByLanguage = {
 
 let speechRequestId = 0;
 let activeRecognition = null;
+let lastUtteranceEndTime = 0;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -155,20 +156,31 @@ const speakChunk = ({ synth, chunk, voice, locale, volume, requestId, onStatus }
 
     utterance.onend = () => {
       clearTimeout(watchdog);
+      lastUtteranceEndTime = Date.now();
       finish(true);
     };
 
     utterance.onerror = (event) => {
       clearTimeout(watchdog);
+      lastUtteranceEndTime = Date.now();
+      // If this request is no longer active, pretend it succeeded
       if (speechRequestId !== requestId) {
         finish(true);
         return;
       }
       const errorType = String(event?.error || '').toLowerCase();
-      if (errorType === 'interrupted' || errorType === 'canceled' || errorType === 'cancelled') {
+      // Treat interruptions/cancellations as success since the audio system is unstable
+      // and we may have silently cancelled it to start a new utterance
+      if (
+        errorType === 'interrupted' ||
+        errorType === 'canceled' ||
+        errorType === 'cancelled' ||
+        errorType === 'network'
+      ) {
         finish(true);
         return;
       }
+      // For real errors, fail
       finish(false);
     };
 
@@ -200,15 +212,21 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
   for (const voice of candidates) {
     if (speechRequestId !== requestId) return false;
     
-    // Wait for any pending utterances AND give audio system time to fully reset
+    // Wait for any pending utterances to completely finish
     let safetyCount = 0;
     while (synth.pending && safetyCount < 100) {
       await wait(50);
       safetyCount += 1;
     }
     
-    // Always add a final reset delay before trying this voice
-    await wait(300);
+    // Also wait for time since last utterance ended to ensure audio context is truly reset
+    const timeSinceLastEnd = Date.now() - lastUtteranceEndTime;
+    if (timeSinceLastEnd < 400) {
+      await wait(400 - timeSinceLastEnd);
+    }
+    
+    // Short pause to let audio system stabilize
+    await wait(100);
     
     // Only proceed if still active
     if (speechRequestId !== requestId) return false;
@@ -238,7 +256,7 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
     }
     
     // If voice failed, longer pause before trying next voice
-    await wait(400);
+    await wait(500);
   }
 
   onStatus?.('error');
@@ -261,12 +279,19 @@ export const speakWithVoiceAssistant = async ({
     try {
       const synth = window.speechSynthesis;
       
-      // Wait for audio system to be ready
+      // Wait for audio system to be fully ready
       let safetyCount = 0;
       while (synth.pending && safetyCount < 50) {
         await wait(50);
         safetyCount += 1;
       }
+      
+      // Wait for time since last utterance ended
+      const timeSinceLastEnd = Date.now() - lastUtteranceEndTime;
+      if (timeSinceLastEnd < 400) {
+        await wait(400 - timeSinceLastEnd);
+      }
+      
       await wait(150);
       
       const locale = getSpeechLocale(language);
@@ -307,12 +332,20 @@ export const speakWithVoiceAssistant = async ({
         };
         quickUtterance.onend = () => {
           clearTimeout(quickWatchdog);
+          lastUtteranceEndTime = Date.now();
           onStatus?.('ready');
         };
         quickUtterance.onerror = (event) => {
           clearTimeout(quickWatchdog);
+          lastUtteranceEndTime = Date.now();
           const errorType = String(event?.error || '').toLowerCase();
-          if (errorType === 'interrupted' || errorType === 'canceled' || errorType === 'cancelled') {
+          // Treat common interruptions as success; we may have silently cancelled it
+          if (
+            errorType === 'interrupted' ||
+            errorType === 'canceled' ||
+            errorType === 'cancelled' ||
+            errorType === 'network'
+          ) {
             finish(true);
             return;
           }
