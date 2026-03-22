@@ -99,6 +99,7 @@ const waitForSynthesisIdle = async (synth, maxMs = 1400) => {
   while ((synth.speaking || synth.pending) && Date.now() - start < maxMs) {
     await wait(40);
   }
+  return !(synth.speaking || synth.pending);
 };
 
 const speakOneChunk = ({ synth, chunk, voice, locale, volume, requestId, onStatus }) =>
@@ -196,7 +197,30 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
   const synth = window.speechSynthesis;
   const locale = getSpeechLocale(language);
 
-  await waitForSynthesisIdle(synth);
+  try {
+    // Some browsers keep synthesis paused after media interruptions.
+    synth.resume?.();
+  } catch (_error) {
+    // ignore
+  }
+
+  let isIdle = await waitForSynthesisIdle(synth);
+  if (!isIdle) {
+    // Hard recovery if browser keeps stale utterances forever.
+    try {
+      synth.cancel();
+    } catch (_error) {
+      // ignore
+    }
+    await wait(120);
+    isIdle = await waitForSynthesisIdle(synth, 600);
+  }
+
+  if (!isIdle) {
+    onStatus?.('error');
+    return false;
+  }
+
   if (speechRequestId !== requestId) {
     onStatus?.('ready');
     return true;
@@ -204,7 +228,7 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
 
   const voices = await waitForVoices(synth);
   const selectedVoice = pickVoice(voices, locale);
-  const fallbackVoice = selectedVoice ? null : pickVoice(voices, 'en-IN');
+  const fallbackVoice = pickVoice(voices, 'en-IN');
 
   for (let index = 0; index < chunks.length; index += 1) {
     if (speechRequestId !== requestId) {
@@ -223,12 +247,26 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
       onStatus
     });
 
-    if (!ok && fallbackVoice) {
+    if (!ok && fallbackVoice && fallbackVoice !== selectedVoice) {
       await wait(120);
       ok = await speakOneChunk({
         synth,
         chunk,
         voice: fallbackVoice,
+        locale,
+        volume,
+        requestId,
+        onStatus
+      });
+    }
+
+    if (!ok) {
+      // Final fallback without explicit voice assignment.
+      await wait(120);
+      ok = await speakOneChunk({
+        synth,
+        chunk,
+        voice: null,
         locale,
         volume,
         requestId,
