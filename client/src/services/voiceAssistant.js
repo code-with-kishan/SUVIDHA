@@ -197,13 +197,16 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
   for (const voice of candidates) {
     if (speechRequestId !== requestId) return false;
     try {
-       await wait(100);
-       synth.cancel();
-       await wait(150);
-       synth.pause();
-       await wait(100);
-       synth.resume();
-       await wait(100);
+      await wait(100);
+      synth.cancel();
+      await wait(150);
+      synth.pause();
+      await wait(100);
+      synth.resume();
+      await wait(100);
+    } catch (_error) {
+      // ignored
+    }
 
     let allOk = true;
     for (const chunk of chunks) {
