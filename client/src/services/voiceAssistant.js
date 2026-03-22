@@ -100,7 +100,11 @@ export const isVoiceCommandSupported = () => Boolean(getSpeechRecognitionCtor())
 export const stopVoiceAssistant = () => {
   speechRequestId += 1;
   if (typeof window !== 'undefined' && window.speechSynthesis) {
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch (_e) {
+      // ignore
+    }
   }
 };
 
@@ -134,6 +138,10 @@ const speakChunk = ({ synth, chunk, voice, locale, volume, requestId, onStatus }
     const finish = (result) => {
       if (settled) return;
       settled = true;
+      // Clean up listeners to avoid memory leaks
+      utterance.onstart = null;
+      utterance.onend = null;
+      utterance.onerror = null;
       resolve(result);
     };
 
@@ -197,10 +205,18 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
   for (const voice of candidates) {
     if (speechRequestId !== requestId) return false;
     
-    // Wait for any pending utterances to finish before trying a new voice
-    while (synth.pending) {
+    // Wait for any pending utterances to completely finish
+    let safetyCount = 0;
+    while (synth.pending && safetyCount < 100) {
       await wait(50);
+      safetyCount += 1;
     }
+    
+    // Small delay to let audio system reset between voice attempts
+    await wait(100);
+    
+    // Only proceed if still active
+    if (speechRequestId !== requestId) return false;
 
     let allOk = true;
     for (const chunk of chunks) {
@@ -225,6 +241,9 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
       onStatus?.('ready');
       return true;
     }
+    
+    // If voice failed, brief pause before trying next voice
+    await wait(200);
   }
 
   onStatus?.('error');
@@ -291,8 +310,12 @@ export const speakWithVoiceAssistant = async ({
           finish(false);
         };
 
-        synth.cancel();
-        synth.speak(quickUtterance);
+        // Don't aggressively cancel - just speak
+        try {
+          synth.speak(quickUtterance);
+        } catch (_e) {
+          finish(false);
+        }
       });
 
       if (quickStartOk) {
