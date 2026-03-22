@@ -98,14 +98,9 @@ export const isVoiceOutputSupported = () => {
 export const isVoiceCommandSupported = () => Boolean(getSpeechRecognitionCtor());
 
 export const stopVoiceAssistant = () => {
+  // Increment requestId to signal any pending operations to stop
+  // DO NOT call cancel() - it corrupts the audio context
   speechRequestId += 1;
-  if (typeof window !== 'undefined' && window.speechSynthesis) {
-    try {
-      window.speechSynthesis.cancel();
-    } catch (_e) {
-      // ignore
-    }
-  }
 };
 
 export const stopVoiceCommandListener = () => {
@@ -205,15 +200,15 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
   for (const voice of candidates) {
     if (speechRequestId !== requestId) return false;
     
-    // Wait for any pending utterances to completely finish
+    // Wait for any pending utterances AND give audio system time to fully reset
     let safetyCount = 0;
     while (synth.pending && safetyCount < 100) {
       await wait(50);
       safetyCount += 1;
     }
     
-    // Small delay to let audio system reset between voice attempts
-    await wait(100);
+    // Always add a final reset delay before trying this voice
+    await wait(300);
     
     // Only proceed if still active
     if (speechRequestId !== requestId) return false;
@@ -242,8 +237,8 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
       return true;
     }
     
-    // If voice failed, brief pause before trying next voice
-    await wait(200);
+    // If voice failed, longer pause before trying next voice
+    await wait(400);
   }
 
   onStatus?.('error');
@@ -265,6 +260,15 @@ export const speakWithVoiceAssistant = async ({
   if (userInitiated && !skipQuickStart && isVoiceOutputSupported()) {
     try {
       const synth = window.speechSynthesis;
+      
+      // Wait for audio system to be ready
+      let safetyCount = 0;
+      while (synth.pending && safetyCount < 50) {
+        await wait(50);
+        safetyCount += 1;
+      }
+      await wait(150);
+      
       const locale = getSpeechLocale(language);
       const firstChunk = splitText(text, 120)[0] || text;
       const voices = synth.getVoices() || [];
@@ -285,6 +289,10 @@ export const speakWithVoiceAssistant = async ({
         const finish = (value) => {
           if (settled) return;
           settled = true;
+          // Clean up listeners
+          quickUtterance.onstart = null;
+          quickUtterance.onend = null;
+          quickUtterance.onerror = null;
           resolve(value);
         };
 
@@ -298,6 +306,7 @@ export const speakWithVoiceAssistant = async ({
           finish(true);
         };
         quickUtterance.onend = () => {
+          clearTimeout(quickWatchdog);
           onStatus?.('ready');
         };
         quickUtterance.onerror = (event) => {
@@ -310,7 +319,6 @@ export const speakWithVoiceAssistant = async ({
           finish(false);
         };
 
-        // Don't aggressively cancel - just speak
         try {
           synth.speak(quickUtterance);
         } catch (_e) {
