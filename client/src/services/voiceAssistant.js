@@ -10,8 +10,8 @@ const speechLocaleByLanguage = {
 };
 
 let speechRequestId = 0;
-let activeRecognition = null;
 let speechQueue = Promise.resolve();
+let activeRecognition = null;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -23,7 +23,7 @@ export const normalizeTranscript = (value) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const splitText = (text, maxLen = 180) => {
+const splitText = (text, maxLen = 170) => {
   const normalized = String(text || '').replace(/\s+/g, ' ').trim();
   if (!normalized) return [];
 
@@ -54,29 +54,6 @@ const splitText = (text, maxLen = 180) => {
   return chunks;
 };
 
-const waitForVoices = async (synth, timeoutMs = 1500) => {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const voices = synth.getVoices() || [];
-    if (voices.length) return voices;
-    await wait(100);
-  }
-  return synth.getVoices() || [];
-};
-
-const pickVoice = (voices, locale) => {
-  if (!voices?.length) return null;
-  const baseLocale = locale?.split('-')[0] || 'en';
-  return (
-    voices.find((voice) => voice.lang === locale) ||
-    voices.find((voice) => voice.lang?.startsWith(baseLocale)) ||
-    voices.find((voice) => voice.default) ||
-    voices.find((voice) => voice.lang?.startsWith('en')) ||
-    voices[0] ||
-    null
-  );
-};
-
 const getSpeechRecognitionCtor = () => {
   if (typeof window === 'undefined') return null;
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -94,15 +71,37 @@ const enqueueSpeech = (task) => {
   return speechQueue;
 };
 
-const waitForSynthesisIdle = async (synth, maxMs = 1400) => {
-  const start = Date.now();
-  while ((synth.speaking || synth.pending) && Date.now() - start < maxMs) {
-    await wait(40);
-  }
-  return !(synth.speaking || synth.pending);
+const getVoicesWithTimeout = async (synth, timeoutMs = 1800) => {
+  const immediate = synth.getVoices() || [];
+  if (immediate.length) return immediate;
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      synth.onvoiceschanged = null;
+      resolve(synth.getVoices() || []);
+    }, timeoutMs);
+
+    synth.onvoiceschanged = () => {
+      clearTimeout(timer);
+      synth.onvoiceschanged = null;
+      resolve(synth.getVoices() || []);
+    };
+  });
 };
 
-const speakOneChunk = ({ synth, chunk, voice, locale, volume, requestId, onStatus }) =>
+const chooseVoice = (voices, locale) => {
+  if (!voices?.length) return null;
+  const baseLocale = locale.split('-')[0];
+  return (
+    voices.find((voice) => voice.lang === locale) ||
+    voices.find((voice) => voice.lang?.startsWith(baseLocale)) ||
+    voices.find((voice) => voice.default) ||
+    voices.find((voice) => voice.lang?.startsWith('en')) ||
+    null
+  );
+};
+
+const speakChunk = ({ synth, chunk, voice, locale, volume, requestId, onStatus }) =>
   new Promise((resolve) => {
     const utterance = new SpeechSynthesisUtterance(chunk);
     utterance.lang = voice?.lang || locale;
@@ -113,19 +112,19 @@ const speakOneChunk = ({ synth, chunk, voice, locale, volume, requestId, onStatu
 
     let settled = false;
     let started = false;
-    const finish = (result) => {
+
+    const finish = (ok) => {
       if (settled) return;
       settled = true;
       utterance.onstart = null;
       utterance.onend = null;
       utterance.onerror = null;
-      resolve(result);
+      resolve(ok);
     };
 
     const watchdog = setTimeout(() => {
-      // Some browsers never emit onstart/onend after interruptions.
       finish(started);
-    }, 9000);
+    }, 10000);
 
     utterance.onstart = () => {
       started = true;
@@ -164,145 +163,39 @@ const speakOneChunk = ({ synth, chunk, voice, locale, volume, requestId, onStatu
     }
   });
 
-export const stopVoiceAssistant = () => {
-  speechRequestId += 1;
-};
-
-export const stopVoiceCommandListener = () => {
-  if (!activeRecognition) return;
-  try {
-    activeRecognition.onresult = null;
-    activeRecognition.onerror = null;
-    activeRecognition.onend = null;
-    activeRecognition.onstart = null;
-    activeRecognition.stop();
-  } catch (_error) {
-    // ignored
-  }
-  activeRecognition = null;
-};
-
-const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }) => {
-  if (!isVoiceOutputSupported()) {
-    onStatus?.('unsupported');
-    return false;
-  }
-
-  const chunks = splitText(text);
-  if (!chunks.length) {
-    onStatus?.('ready');
-    return true;
-  }
-
-  const synth = window.speechSynthesis;
-  const locale = getSpeechLocale(language);
-
-  try {
-    // Some browsers keep synthesis paused after media interruptions.
-    synth.resume?.();
-  } catch (_error) {
-    // ignore
-  }
-
-  let isIdle = await waitForSynthesisIdle(synth);
-  if (!isIdle) {
-    // Hard recovery if browser keeps stale utterances forever.
-    try {
-      synth.cancel();
-    } catch (_error) {
-      // ignore
-    }
-    await wait(120);
-    isIdle = await waitForSynthesisIdle(synth, 600);
-  }
-
-  if (!isIdle) {
-    onStatus?.('error');
-    return false;
-  }
-
-  if (speechRequestId !== requestId) {
-    onStatus?.('ready');
-    return true;
-  }
-
-  const voices = await waitForVoices(synth);
-  const selectedVoice = pickVoice(voices, locale);
-  const fallbackVoice = pickVoice(voices, 'en-IN');
-
-  for (let index = 0; index < chunks.length; index += 1) {
-    if (speechRequestId !== requestId) {
-      onStatus?.('ready');
-      return true;
-    }
-
-    const chunk = chunks[index];
-    let ok = await speakOneChunk({
-      synth,
-      chunk,
-      voice: selectedVoice,
-      locale,
-      volume,
-      requestId,
-      onStatus
-    });
-
-    if (!ok && fallbackVoice && fallbackVoice !== selectedVoice) {
-      await wait(120);
-      ok = await speakOneChunk({
-        synth,
-        chunk,
-        voice: fallbackVoice,
-        locale,
-        volume,
-        requestId,
-        onStatus
-      });
-    }
-
-    if (!ok) {
-      // Final fallback without explicit voice assignment.
-      await wait(120);
-      ok = await speakOneChunk({
-        synth,
-        chunk,
-        voice: null,
-        locale,
-        volume,
-        requestId,
-        onStatus
-      });
-    }
-
-    if (!ok) {
-      onStatus?.('error');
-      return false;
-    }
-
-    if (index < chunks.length - 1) {
-      await wait(50);
-    }
-  }
-
-  onStatus?.('ready');
-  return true;
-};
-
-const hardResetSynthesis = async () => {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
-  const synth = window.speechSynthesis;
+const resetSynthIfBusy = async (synth) => {
+  if (!synth.speaking && !synth.pending) return;
   try {
     synth.cancel();
   } catch (_error) {
     // ignore
   }
-  await wait(160);
+  await wait(120);
+};
+
+export const stopVoiceAssistant = () => {
+  speechRequestId += 1;
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (_error) {
+      // ignore
+    }
+  }
+};
+
+export const stopVoiceCommandListener = () => {
+  if (!activeRecognition) return;
   try {
-    synth.resume?.();
+    activeRecognition.onstart = null;
+    activeRecognition.onresult = null;
+    activeRecognition.onerror = null;
+    activeRecognition.onend = null;
+    activeRecognition.stop();
   } catch (_error) {
     // ignore
   }
-  await wait(100);
+  activeRecognition = null;
 };
 
 export const speakWithVoiceAssistant = async ({
@@ -313,54 +206,85 @@ export const speakWithVoiceAssistant = async ({
   userInitiated = false,
   skipQuickStart = false
 }) => {
-  const _useQuickStart = userInitiated && !skipQuickStart;
-  void _useQuickStart;
+  void userInitiated;
+  void skipQuickStart;
 
   const requestId = ++speechRequestId;
   onStatus?.('starting');
 
   return enqueueSpeech(async () => {
-    if (speechRequestId !== requestId) return true;
-    const safeVolume = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1;
-    const sourceText = String(text || '').trim();
-    if (!sourceText) {
+    if (!isVoiceOutputSupported()) {
+      onStatus?.('unsupported');
+      return false;
+    }
+
+    if (speechRequestId !== requestId) {
       onStatus?.('ready');
       return true;
     }
 
-    const attempts = [
-      sourceText,
-      sourceText,
-      splitText(sourceText, 120).slice(0, 2).join(' ')
-    ];
+    const normalizedText = String(text || '').trim();
+    if (!normalizedText) {
+      onStatus?.('ready');
+      return true;
+    }
 
-    for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
-      if (speechRequestId !== requestId) return true;
-      const payloadText = attempts[attemptIndex];
-      if (!payloadText) continue;
+    const synth = window.speechSynthesis;
+    const locale = getSpeechLocale(language);
+    const safeVolume = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1;
+    const chunks = splitText(normalizedText);
 
-      if (attemptIndex > 0) {
-        await hardResetSynthesis();
-      }
+    try {
+      synth.resume?.();
+    } catch (_error) {
+      // ignore
+    }
 
-      const ok = await runSpeechPlayback({
-        text: payloadText,
-        language,
-        volume: safeVolume,
-        onStatus,
-        requestId
-      });
+    await resetSynthIfBusy(synth);
 
-      if (ok) {
+    const voices = await getVoicesWithTimeout(synth);
+    const preferredVoice = chooseVoice(voices, locale);
+    const fallbackVoice = chooseVoice(voices, 'en-IN');
+
+    for (const chunk of chunks) {
+      if (speechRequestId !== requestId) {
         onStatus?.('ready');
         return true;
       }
 
-      await wait(120);
+      let ok = await speakChunk({
+        synth,
+        chunk,
+        voice: preferredVoice,
+        locale,
+        volume: safeVolume,
+        requestId,
+        onStatus
+      });
+
+      if (!ok && fallbackVoice && fallbackVoice !== preferredVoice) {
+        await wait(120);
+        ok = await speakChunk({
+          synth,
+          chunk,
+          voice: fallbackVoice,
+          locale,
+          volume: safeVolume,
+          requestId,
+          onStatus
+        });
+      }
+
+      if (!ok) {
+        onStatus?.('error');
+        return false;
+      }
+
+      await wait(50);
     }
 
-    onStatus?.('error');
-    return false;
+    onStatus?.('ready');
+    return true;
   });
 };
 
@@ -384,7 +308,7 @@ export const startVoiceCommandListener = ({ language, onTranscript, onError, onS
   };
 
   recognition.onresult = (event) => {
-    const transcript = event.results?.[0]?.[0]?.transcript || '';
+    const transcript = event?.results?.[0]?.[0]?.transcript || '';
     onTranscript?.(normalizeTranscript(transcript));
   };
 

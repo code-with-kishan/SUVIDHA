@@ -7,18 +7,13 @@ import Layout from '../components/Layout';
 import KioskButton from '../components/KioskButton';
 import OnScreenKeypad from '../components/OnScreenKeypad';
 import OnScreenKeyboard from '../components/OnScreenKeyboard';
+import {
+  speakWithVoiceAssistant,
+  startVoiceCommandListener,
+  stopVoiceAssistant,
+  stopVoiceCommandListener
+} from '../services/voiceAssistant';
 import { enterGuestMode, setAudioVolume, setAuth } from '../redux/store';
-
-const speechLocaleByLanguage = {
-  en: 'en-IN',
-  hi: 'hi-IN',
-  mr: 'mr-IN',
-  pa: 'pa-IN',
-  ur: 'ur-IN',
-  ne: 'ne-NP',
-  ks: 'ur-IN',
-  doi: 'hi-IN'
-};
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -34,30 +29,9 @@ export default function LoginPage() {
   const [activeField, setActiveField] = useState('');
   const [voiceStep, setVoiceStep] = useState('idle');
   const [isVoiceFlowRunning, setIsVoiceFlowRunning] = useState(false);
-  const activeRecognitionRef = useRef(null);
   const abortFlowRef = useRef(false);
 
   const currentLanguage = useCallback(() => localStorage.getItem('suvidha_lang') || 'en', []);
-
-  const getLocale = useCallback((lang) => speechLocaleByLanguage[lang] || 'en-IN', []);
-
-  const stopActiveRecognition = useCallback(() => {
-    const recognition = activeRecognitionRef.current;
-    if (!recognition) return;
-    try {
-      recognition.onresult = null;
-      recognition.onerror = null;
-      recognition.onend = null;
-      recognition.stop();
-    } catch (_error) {
-      // ignored
-    }
-    activeRecognitionRef.current = null;
-  }, []);
-
-  const stopActiveSpeech = useCallback(() => {
-    // Keep local cleanup safe: shared voice engine handles cancellation centrally.
-  }, []);
 
   const getPromptForField = useCallback(
     (field, retry = false) => {
@@ -188,87 +162,48 @@ export default function LoginPage() {
   }, []);
 
   const speakPrompt = useCallback(async (text, lang, volume) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return false;
-
-    return new Promise((resolve) => {
-      const synth = window.speechSynthesis;
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = getLocale(lang);
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      utterance.volume = Math.min(1, Math.max(0.35, Number(volume) || 0.75));
-
-      let settled = false;
-      const finish = (ok) => {
-        if (settled) return;
-        settled = true;
-        resolve(ok);
-      };
-
-      const timeout = setTimeout(() => finish(false), 12000);
-      utterance.onend = () => {
-        clearTimeout(timeout);
-        finish(true);
-      };
-      utterance.onerror = () => {
-        clearTimeout(timeout);
-        finish(false);
-      };
-
-      try {
-        synth.speak(utterance);
-      } catch (_error) {
-        clearTimeout(timeout);
-        finish(false);
-      }
+    return speakWithVoiceAssistant({
+      text,
+      language: lang,
+      volume: Math.min(1, Math.max(0.35, Number(volume) || 0.75)),
+      userInitiated: true,
+      skipQuickStart: true
     });
-  }, [getLocale]);
+  }, []);
 
   const listenOnce = useCallback(
     async (lang) => {
-      const RecognitionCtor =
-        typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
-      if (!RecognitionCtor) return '';
-
       return new Promise((resolve) => {
         let settled = false;
         const finish = (value) => {
           if (settled) return;
           settled = true;
-          stopActiveRecognition();
+          stopVoiceCommandListener();
           resolve(value || '');
         };
 
-        const recognition = new RecognitionCtor();
-        activeRecognitionRef.current = recognition;
-        recognition.lang = getLocale(lang);
-        recognition.interimResults = false;
-        recognition.continuous = false;
-        recognition.maxAlternatives = 3;
-
         const timeout = setTimeout(() => finish(''), 10000);
-        recognition.onresult = (event) => {
-          clearTimeout(timeout);
-          finish(event?.results?.[0]?.[0]?.transcript || '');
-        };
-        recognition.onerror = () => {
-          clearTimeout(timeout);
-          finish('');
-        };
-        recognition.onend = () => {
-          clearTimeout(timeout);
-          finish('');
-        };
 
-        try {
-          recognition.start();
-        } catch (_error) {
+        const started = startVoiceCommandListener({
+          language: lang,
+          onTranscript: (transcript) => {
+            clearTimeout(timeout);
+            finish(transcript || '');
+          },
+          onError: () => {
+            clearTimeout(timeout);
+            finish('');
+          },
+          onStatus: () => {}
+        });
+
+        if (!started) {
           clearTimeout(timeout);
           finish('');
         }
       });
     },
-    [getLocale, stopActiveRecognition]
+    []
   );
 
   const startVoiceLoginFlow = useCallback(() => {
@@ -350,17 +285,16 @@ export default function LoginPage() {
     listenOnce,
     isValidVoiceFieldValue,
     sanitizeVoiceValue,
-    speakPrompt,
-    stopActiveSpeech
+    speakPrompt
   ]);
 
   useEffect(() => {
     return () => {
       abortFlowRef.current = true;
-      stopActiveRecognition();
-      stopActiveSpeech();
+      stopVoiceCommandListener();
+      stopVoiceAssistant();
     };
-  }, [stopActiveRecognition, stopActiveSpeech]);
+  }, []);
 
   const handleSendOtp = async () => {
     if (!form.mobile || !form.name || !form.email || !form.aadhaar) {
