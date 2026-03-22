@@ -7,7 +7,7 @@ import Layout from '../components/Layout';
 import KioskButton from '../components/KioskButton';
 import OnScreenKeypad from '../components/OnScreenKeypad';
 import OnScreenKeyboard from '../components/OnScreenKeyboard';
-import { enterGuestMode, setAudioGuidance, setAudioVolume, setAuth } from '../redux/store';
+import { enterGuestMode, setAudioVolume, setAuth } from '../redux/store';
 
 const speechLocaleByLanguage = {
   en: 'en-IN',
@@ -218,7 +218,6 @@ export default function LoginPage() {
       };
 
       try {
-        synth.cancel();
         synth.speak(utterance);
       } catch (_error) {
         clearTimeout(timeout);
@@ -278,7 +277,6 @@ export default function LoginPage() {
     if (isVoiceFlowRunning) return;
 
     const lang = currentLanguage();
-    dispatch(setAudioGuidance(true));
     if (Number(audioVolume) <= 0) dispatch(setAudioVolume(0.75));
 
     const runFlow = async () => {
@@ -304,7 +302,6 @@ export default function LoginPage() {
 
             if (abortFlowRef.current) return;
 
-            stopActiveSpeech();
             await wait(320);
 
             const transcript = await listenOnce(lang);
