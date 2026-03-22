@@ -157,8 +157,6 @@ const speakOneChunk = ({ synth, chunk, voice, locale, volume, requestId, onStatu
 
     try {
       synth.speak(utterance);
-      // Fallback in case browser never emits onstart but does speak.
-      onStatus?.('speaking');
     } catch (_error) {
       clearTimeout(watchdog);
       finish(false);
@@ -199,14 +197,20 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
   const locale = getSpeechLocale(language);
 
   await waitForSynthesisIdle(synth);
-  if (speechRequestId !== requestId) return true;
+  if (speechRequestId !== requestId) {
+    onStatus?.('ready');
+    return true;
+  }
 
   const voices = await waitForVoices(synth);
   const selectedVoice = pickVoice(voices, locale);
   const fallbackVoice = selectedVoice ? null : pickVoice(voices, 'en-IN');
 
   for (let index = 0; index < chunks.length; index += 1) {
-    if (speechRequestId !== requestId) return true;
+    if (speechRequestId !== requestId) {
+      onStatus?.('ready');
+      return true;
+    }
 
     const chunk = chunks[index];
     let ok = await speakOneChunk({
