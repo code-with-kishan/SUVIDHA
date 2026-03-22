@@ -56,9 +56,7 @@ export default function LoginPage() {
   }, []);
 
   const stopActiveSpeech = useCallback(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+    // Keep local cleanup safe: shared voice engine handles cancellation centrally.
   }, []);
 
   const getPromptForField = useCallback(
