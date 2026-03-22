@@ -288,6 +288,23 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
   return true;
 };
 
+const hardResetSynthesis = async () => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  const synth = window.speechSynthesis;
+  try {
+    synth.cancel();
+  } catch (_error) {
+    // ignore
+  }
+  await wait(160);
+  try {
+    synth.resume?.();
+  } catch (_error) {
+    // ignore
+  }
+  await wait(100);
+};
+
 export const speakWithVoiceAssistant = async ({
   text,
   language,
@@ -305,13 +322,45 @@ export const speakWithVoiceAssistant = async ({
   return enqueueSpeech(async () => {
     if (speechRequestId !== requestId) return true;
     const safeVolume = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1;
-    return runSpeechPlayback({
-      text,
-      language,
-      volume: safeVolume,
-      onStatus,
-      requestId
-    });
+    const sourceText = String(text || '').trim();
+    if (!sourceText) {
+      onStatus?.('ready');
+      return true;
+    }
+
+    const attempts = [
+      sourceText,
+      sourceText,
+      splitText(sourceText, 120).slice(0, 2).join(' ')
+    ];
+
+    for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
+      if (speechRequestId !== requestId) return true;
+      const payloadText = attempts[attemptIndex];
+      if (!payloadText) continue;
+
+      if (attemptIndex > 0) {
+        await hardResetSynthesis();
+      }
+
+      const ok = await runSpeechPlayback({
+        text: payloadText,
+        language,
+        volume: safeVolume,
+        onStatus,
+        requestId
+      });
+
+      if (ok) {
+        onStatus?.('ready');
+        return true;
+      }
+
+      await wait(120);
+    }
+
+    onStatus?.('error');
+    return false;
   });
 };
 
