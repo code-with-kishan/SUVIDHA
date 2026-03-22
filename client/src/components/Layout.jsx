@@ -103,13 +103,25 @@ export default function Layout({ children, title }) {
   const speakAssistant = useCallback(
     async (message, userInitiated = false) => {
       const effectiveVolume = Math.min(1, Math.max(0, headphoneMode ? audioVolume + 0.1 : audioVolume));
-      const ok = await speakWithVoiceAssistant({
+      let ok = await speakWithVoiceAssistant({
         text: message,
         language,
         volume: effectiveVolume,
         onStatus: setVoiceStatus,
         userInitiated
       });
+
+      if (!ok && userInitiated) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        ok = await speakWithVoiceAssistant({
+          text: message,
+          language,
+          volume: effectiveVolume,
+          onStatus: setVoiceStatus,
+          userInitiated: false,
+          skipQuickStart: true
+        });
+      }
 
       if (!ok) {
         setVoiceStatus('ready');

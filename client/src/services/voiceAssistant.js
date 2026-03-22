@@ -148,7 +148,7 @@ const speakChunk = ({ synth, chunk, voice, locale, volume, requestId, onStatus }
     utterance.onstart = () => {
       if (speechRequestId !== requestId) {
         clearTimeout(watchdog);
-        finish(false);
+        finish(true);
         return;
       }
       onStatus?.('speaking');
@@ -210,7 +210,7 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
   const candidates = getVoiceCandidates(voices, locale);
 
   for (const voice of candidates) {
-    if (speechRequestId !== requestId) return false;
+    if (speechRequestId !== requestId) return true;
     
     // Wait for any pending utterances to completely finish
     let safetyCount = 0;
@@ -229,11 +229,11 @@ const runSpeechPlayback = async ({ text, language, volume, onStatus, requestId }
     await wait(100);
     
     // Only proceed if still active
-    if (speechRequestId !== requestId) return false;
+    if (speechRequestId !== requestId) return true;
 
     let allOk = true;
     for (const chunk of chunks) {
-      if (speechRequestId !== requestId) return false;
+      if (speechRequestId !== requestId) return true;
       const ok = await speakChunk({
         synth,
         chunk,
